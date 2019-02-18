@@ -4,3 +4,4 @@ from .fcn16s import FCN16s
 from .fcn8s import FCN8s
 from .fcn8s import FCN8sAtOnce
 from .vgg import VGG16
+from .fcn8s_pm25 import *

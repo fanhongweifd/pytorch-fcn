@@ -37,10 +37,6 @@ if sys.argv[1] == 'release':
     sys.exit(0)
 
 
-with open('README.md') as f:
-    long_description = github2pypi.replace_url(
-        slug='wkentaro/pytorch-fcn', content=f.read()
-    )
 
 
 setup(
@@ -49,7 +45,6 @@ setup(
     packages=find_packages(exclude=['github2pypi']),
     install_requires=[r.strip() for r in open('requirements.txt')],
     description='PyTorch Implementation of Fully Convolutional Networks.',
-    long_description=long_description,
     long_description_content_type='text/markdown',
     package_data={'torchfcn': ['ext/*']},
     include_package_data=True,

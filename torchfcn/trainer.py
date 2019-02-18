@@ -1,62 +1,103 @@
 import datetime
-from distutils.version import LooseVersion
 import math
 import os
 import os.path as osp
 import shutil
 
-import fcn
 import numpy as np
-import pytz
-import scipy.misc
 import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
-import tqdm
+import torch.nn as nn
 
-import torchfcn
+def sum_gredient(model):
+    """
+    功能函数,用来观察梯度变化
+    :param model:
+    :param lr:
+    """
+    sum_gred = 0
+    num_gred = 0
+    for m in model.modules():
+        if isinstance(m, nn.Conv2d):
+            num_gred += torch.numel(m.weight.grad)
+            sum_gred += torch.abs(m.weight.grad).sum()
+    avg_grad = sum_gred/num_gred
+    return avg_grad
 
-
-def cross_entropy2d(input, target, weight=None, size_average=True):
+def mseloss_2d(input, target, size_average=True):
     # input: (n, c, h, w), target: (n, h, w)
     n, c, h, w = input.size()
     # log_p: (n, c, h, w)
-    if LooseVersion(torch.__version__) < LooseVersion('0.3'):
-        # ==0.2.X
-        log_p = F.log_softmax(input)
-    else:
-        # >=0.3
-        log_p = F.log_softmax(input, dim=1)
+    # if LooseVersion(torch.__version__) < LooseVersion('0.3'):
+    #     # ==0.2.X
+    #     log_p = F.log_softmax(input)
+    # else:
+    #     # >=0.3
+    #     log_p = F.log_softmax(input, dim=1)
     # log_p: (n*h*w, c)
-    log_p = log_p.transpose(1, 2).transpose(2, 3).contiguous()
-    log_p = log_p[target.view(n, h, w, 1).repeat(1, 1, 1, c) >= 0]
-    log_p = log_p.view(-1, c)
+    input_reshape = input.transpose(1, 2).transpose(2, 3).contiguous()
+    target = target.view(n, h, w, 1).repeat(1, 1, 1, c)
+    # input = input[target.view(n, h, w, 1).repeat(1, 1, 1, c)]
+    # input = input.view(-1, c)
     # target: (n*h*w,)
-    mask = target >= 0
-    target = target[mask]
-    loss = F.nll_loss(log_p, target, weight=weight, reduction='sum')
+    mask = target > 0
+    # target = target[mask]
+    loss = F.mse_loss(input_reshape.float(), target.float(), size_average=None, reduce=None, reduction='none')
+    loss = loss.float() * mask.float()
+    loss = torch.sum(loss.float())
     if size_average:
-        loss /= mask.data.sum()
+        if mask.data.sum() > 0:
+            loss /= mask.data.sum()
     return loss
+
+def smape(A, F):
+        return 100 / len(A) * np.sum(2 * np.abs(F - A) / (np.abs(A) + np.abs(F)))
+
+def smape_loss(input, target):
+    n, c, h, w = input.size()
+    # print('input = %s',input)
+    # print('target = %s', target)
+    try:
+        input_reshape = input.transpose(1, 2).transpose(2, 3).contiguous()
+        target = target.view(n, h, w, 1).repeat(1, 1, 1, c)
+        mask = target > 0
+        input_array = input_reshape[mask].detach().numpy()
+        target_array = target[mask].numpy()
+        if mask.data.sum() <= 0:
+            smape_value = np.nan
+            print('input_array mask = %s' % input_array)
+            print('target_array mask = %s' % target_array)
+            return smape_value
+        smape_value = smape(input_array, target_array)
+    except Exception as e:
+        print(e)
+        raise ValueError
+    print('input_array mask = %s'%input_array)
+    print('target_array mask = %s' % target_array)
+    return smape_value
 
 
 class Trainer(object):
 
-    def __init__(self, cuda, model, optimizer,
+    def __init__(self, cuda, model, optimizer, scheduler,
                  train_loader, val_loader, out, max_iter,
-                 size_average=False, interval_validate=None):
+                 size_average=True, interval_validate=None, use_scheduler=True, use_grad_clip=True, clip=1):
         self.cuda = cuda
 
         self.model = model
         self.optim = optimizer
+        self.scheduler = scheduler
 
         self.train_loader = train_loader
         self.val_loader = val_loader
 
         self.timestamp_start = \
-            datetime.datetime.now(pytz.timezone('Asia/Tokyo'))
+            datetime.datetime.now()
         self.size_average = size_average
-
+        self.use_scheduler = use_scheduler
+        self.use_grad_clip = use_grad_clip
+        self.clip = clip
         if interval_validate is None:
             self.interval_validate = len(self.train_loader)
         else:
@@ -69,16 +110,11 @@ class Trainer(object):
         self.log_headers = [
             'epoch',
             'iteration',
+            'lr',
             'train/loss',
-            'train/acc',
-            'train/acc_cls',
-            'train/mean_iu',
-            'train/fwavacc',
+            'train/smape',
             'valid/loss',
-            'valid/acc',
-            'valid/acc_cls',
-            'valid/mean_iu',
-            'valid/fwavacc',
+            'valid/smape',
             'elapsed_time',
         ]
         if not osp.exists(osp.join(self.out, 'log.csv')):
@@ -88,76 +124,64 @@ class Trainer(object):
         self.epoch = 0
         self.iteration = 0
         self.max_iter = max_iter
-        self.best_mean_iu = 0
+        self.best_smape = 0
 
     def validate(self):
         training = self.model.training
         self.model.eval()
-
-        n_class = len(self.val_loader.dataset.class_names)
-
         val_loss = 0
-        visualizations = []
-        label_trues, label_preds = [], []
-        for batch_idx, (data, target) in tqdm.tqdm(
-                enumerate(self.val_loader), total=len(self.val_loader),
-                desc='Valid iteration=%d' % self.iteration, ncols=80,
-                leave=False):
+        val_smape_loss = 0
+        # for batch_idx, (data, target) in tqdm.tqdm(
+        #         enumerate(self.val_loader), total=len(self.val_loader),
+        #         desc='Valid iteration=%d' % self.iteration, ncols=80,
+        #         leave=False):
+        for batch_idx, (data, target) in enumerate(self.val_loader):
             if self.cuda:
                 data, target = data.cuda(), target.cuda()
             data, target = Variable(data), Variable(target)
             with torch.no_grad():
                 score = self.model(data)
 
-            loss = cross_entropy2d(score, target,
-                                   size_average=self.size_average)
+            loss = mseloss_2d(score, target, size_average=self.size_average)
             loss_data = loss.data.item()
             if np.isnan(loss_data):
                 raise ValueError('loss is nan while validating')
-            val_loss += loss_data / len(data)
-
-            imgs = data.data.cpu()
-            lbl_pred = score.data.max(1)[1].cpu().numpy()[:, :, :]
-            lbl_true = target.data.cpu()
-            for img, lt, lp in zip(imgs, lbl_true, lbl_pred):
-                img, lt = self.val_loader.dataset.untransform(img, lt)
-                label_trues.append(lt)
-                label_preds.append(lp)
-                if len(visualizations) < 9:
-                    viz = fcn.utils.visualize_segmentation(
-                        lbl_pred=lp, lbl_true=lt, img=img, n_class=n_class)
-                    visualizations.append(viz)
-        metrics = torchfcn.utils.label_accuracy_score(
-            label_trues, label_preds, n_class)
+            smape_loss_data = smape_loss(score, target)
+            print('this batch smape_loss =%s, all val smape_loss=%s'%(smape_loss_data,val_smape_loss))
+            # 这里没有把loss为nan的情况在总数中减去，后面要加入
+            if np.isnan(smape_loss_data):
+                continue
+            val_smape_loss += smape_loss_data
+            val_loss += loss_data
 
         out = osp.join(self.out, 'visualization_viz')
         if not osp.exists(out):
             os.makedirs(out)
-        out_file = osp.join(out, 'iter%012d.jpg' % self.iteration)
-        scipy.misc.imsave(out_file, fcn.utils.get_tile_image(visualizations))
 
         val_loss /= len(self.val_loader)
-
+        print('smape loss = %s' % val_smape_loss)
+        val_smape_loss /= len(self.val_loader)
+        print('avg smape loss = %s'%val_smape_loss)
         with open(osp.join(self.out, 'log.csv'), 'a') as f:
             elapsed_time = (
-                datetime.datetime.now(pytz.timezone('Asia/Tokyo')) -
+                datetime.datetime.now() -
                 self.timestamp_start).total_seconds()
-            log = [self.epoch, self.iteration] + [''] * 5 + \
-                  [val_loss] + list(metrics) + [elapsed_time]
+            log = [self.epoch, self.iteration] + [self.optim.param_groups[0]['lr']] + [''] * 2 + \
+                  [val_loss] + [val_smape_loss] + [elapsed_time]
             log = map(str, log)
             f.write(','.join(log) + '\n')
-
-        mean_iu = metrics[2]
-        is_best = mean_iu > self.best_mean_iu
+        print('val epoch = %s, iteration=%s, lr=%s, val_loader_num=%s, val_mce_loss=%s, val_smape=%s' % (
+        self.epoch, self.iteration, self.optim.param_groups[0]['lr'], len(self.val_loader), val_loss, val_smape_loss))
+        is_best = val_smape_loss < self.best_smape
         if is_best:
-            self.best_mean_iu = mean_iu
+            self.best_smape = val_smape_loss
         torch.save({
             'epoch': self.epoch,
             'iteration': self.iteration,
             'arch': self.model.__class__.__name__,
             'optim_state_dict': self.optim.state_dict(),
             'model_state_dict': self.model.state_dict(),
-            'best_mean_iu': self.best_mean_iu,
+            'best_smape': self.best_smape,
         }, osp.join(self.out, 'checkpoint.pth.tar'))
         if is_best:
             shutil.copy(osp.join(self.out, 'checkpoint.pth.tar'),
@@ -168,18 +192,21 @@ class Trainer(object):
 
     def train_epoch(self):
         self.model.train()
-
-        n_class = len(self.train_loader.dataset.class_names)
-
-        for batch_idx, (data, target) in tqdm.tqdm(
-                enumerate(self.train_loader), total=len(self.train_loader),
-                desc='Train epoch=%d' % self.epoch, ncols=80, leave=False):
+        # for batch_idx, (data, target) in tqdm.tqdm(
+        #         enumerate(self.train_loader), total=len(self.train_loader),
+        #         desc='Train epoch=%d' % self.epoch, ncols=80, leave=False):
+        for batch_idx, (data, target) in enumerate(self.train_loader):
+            # target 不能全为空
+            # mask = target > 0
+            # if mask.data.sum()<=0:
+            #     continue
             iteration = batch_idx + self.epoch * len(self.train_loader)
             if self.iteration != 0 and (iteration - 1) != self.iteration:
                 continue  # for resuming
             self.iteration = iteration
 
-            if self.iteration % self.interval_validate == 0:
+            if self.iteration > 0 and self.iteration % (len(self.train_loader)*self.interval_validate) == 0:
+                print('Begin valid:')
                 self.validate()
 
             assert self.model.training
@@ -189,42 +216,50 @@ class Trainer(object):
             data, target = Variable(data), Variable(target)
             self.optim.zero_grad()
             score = self.model(data)
-
-            loss = cross_entropy2d(score, target,
-                                   size_average=self.size_average)
-            loss /= len(data)
+            smape_loss_data = smape_loss(score, target)
+            loss = mseloss_2d(score, target, size_average=self.size_average)
             loss_data = loss.data.item()
             if np.isnan(loss_data):
                 raise ValueError('loss is nan while training')
             loss.backward()
+            if self.use_grad_clip:
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip)
+            avg_gred = sum_gredient(self.model)
             self.optim.step()
-
-            metrics = []
-            lbl_pred = score.data.max(1)[1].cpu().numpy()[:, :, :]
-            lbl_true = target.data.cpu().numpy()
-            acc, acc_cls, mean_iu, fwavacc = \
-                torchfcn.utils.label_accuracy_score(
-                    lbl_true, lbl_pred, n_class=n_class)
-            metrics.append((acc, acc_cls, mean_iu, fwavacc))
-            metrics = np.mean(metrics, axis=0)
+            
 
             with open(osp.join(self.out, 'log.csv'), 'a') as f:
                 elapsed_time = (
-                    datetime.datetime.now(pytz.timezone('Asia/Tokyo')) -
+                    datetime.datetime.now() -
                     self.timestamp_start).total_seconds()
-                log = [self.epoch, self.iteration] + [loss_data] + \
-                    metrics.tolist() + [''] * 5 + [elapsed_time]
+                log = [self.epoch, self.iteration] + [self.optim.param_groups[0]['lr']] + [loss_data] + \
+                    [smape_loss_data] + [''] * 2 + [elapsed_time]
                 log = map(str, log)
                 f.write(','.join(log) + '\n')
-
+                print('train epoch = %s, iteration=%s, lr=%s, avg_gred=%s, mce_loss=%s, smape=%s'%(
+                self.epoch, self.iteration, self.optim.param_groups[0]['lr'], avg_gred, loss_data, smape_loss_data))
             if self.iteration >= self.max_iter:
                 break
 
     def train(self):
         max_epoch = int(math.ceil(1. * self.max_iter / len(self.train_loader)))
-        for epoch in tqdm.trange(self.epoch, max_epoch,
-                                 desc='Train', ncols=80):
+        # for epoch in tqdm.trange(self.epoch, max_epoch,
+        #                          desc='Train', ncols=80):
+        for epoch in range(self.epoch, max_epoch):
+            if self.use_scheduler:
+                self.scheduler.step(epoch)
             self.epoch = epoch
             self.train_epoch()
             if self.iteration >= self.max_iter:
                 break
+
+if __name__ == '__main__':
+    input = torch.randn(2, 1, 5, 5, requires_grad=True)
+    target = torch.randn(2, 5, 5)
+    loss = mseloss_2d(input, target)
+    print(loss)
+    loss.backward()
+    print(input.grad)
+    print(target)
+    smape = smape_loss(input, target)
+    print(smape)
