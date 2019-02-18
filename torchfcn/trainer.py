@@ -28,21 +28,9 @@ def sum_gredient(model):
 def mseloss_2d(input, target, size_average=True):
     # input: (n, c, h, w), target: (n, h, w)
     n, c, h, w = input.size()
-    # log_p: (n, c, h, w)
-    # if LooseVersion(torch.__version__) < LooseVersion('0.3'):
-    #     # ==0.2.X
-    #     log_p = F.log_softmax(input)
-    # else:
-    #     # >=0.3
-    #     log_p = F.log_softmax(input, dim=1)
-    # log_p: (n*h*w, c)
     input_reshape = input.transpose(1, 2).transpose(2, 3).contiguous()
     target = target.view(n, h, w, 1).repeat(1, 1, 1, c)
-    # input = input[target.view(n, h, w, 1).repeat(1, 1, 1, c)]
-    # input = input.view(-1, c)
-    # target: (n*h*w,)
     mask = target > 0
-    # target = target[mask]
     loss = F.mse_loss(input_reshape.float(), target.float(), size_average=None, reduce=None, reduction='none')
     loss = loss.float() * mask.float()
     loss = torch.sum(loss.float())
@@ -73,7 +61,7 @@ def smape_loss(input, target):
     except Exception as e:
         print(e)
         raise ValueError
-    print('predict_array mask = %s'%input_array)
+    print('predict_array mask = %s' % input_array)
     print('target_array mask = %s' % target_array)
     return smape_value
 
@@ -131,10 +119,6 @@ class Trainer(object):
         self.model.eval()
         val_loss = 0
         val_smape_loss = 0
-        # for batch_idx, (data, target) in tqdm.tqdm(
-        #         enumerate(self.val_loader), total=len(self.val_loader),
-        #         desc='Valid iteration=%d' % self.iteration, ncols=80,
-        #         leave=False):
         for batch_idx, (data, target) in enumerate(self.val_loader):
             if self.cuda:
                 data, target = data.cuda(), target.cuda()

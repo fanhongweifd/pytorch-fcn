@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 import argparse
 import datetime
 import os
@@ -7,10 +6,7 @@ import os.path as osp
 import torch.optim.lr_scheduler as lr_scheduler
 import torch
 import yaml
-
 import torchfcn
-
-from train_fcn32s import get_parameters
 from train_fcn32s import git_hash
 
 
@@ -23,8 +19,6 @@ def main():
     )
     parser.add_argument('-g', '--gpu', type=int, required=True, help='gpu id')
     parser.add_argument('--resume', help='checkpoint path')
-    # configurations (same configuration as original work)
-    # https://github.com/shelhamer/fcn.berkeleyvision.org
     parser.add_argument(
         '--max-epoch', type=int, default=200, help='max epoch'
     )

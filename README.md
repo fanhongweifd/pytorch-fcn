@@ -39,7 +39,8 @@ Building your own model in [model example](torchfcn/models/fcn8s_pm25.py)
 
 ## Log parameter
 lr: learn rate
-smape: Symmetric mean absolute percentage error  <img src=".readme/smape.svg" width="50%" />
+smape: Symmetric mean absolute percentage error
+<img src=".readme/smape.svg" width="20%" />  
 mce_loss: Mean squared loss
 predict_array mask: predict score
 target_array mask: ground truth label

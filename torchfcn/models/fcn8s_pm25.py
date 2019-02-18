@@ -150,32 +150,11 @@ class FCN8sPM25_1conv(nn.Module):
         # conv1
         self.conv1_1 = nn.Conv2d(feature_dim, 1, 3, padding=1)
         self.relu1_1 = nn.ReLU(inplace=True)
-        # self.conv1_2 = nn.Conv2d(16, 16, 3, padding=1)
-        # self.relu1_2 = nn.ReLU(inplace=True)
-        #
-        #
-        # self.fc = nn.Conv2d(16, 1, 1)
-        # self.relu_fc = nn.ReLU(inplace=True)
-        # self.drop7 = nn.Dropout2d()
-
-        # self.score_fr = nn.Conv2d(16, 1, 1)
-
         self._initialize_weights()
 
     def _initialize_weights(self):
         for m in self.modules():
             pass
-            # 随机初始化(方案1)
-            # if isinstance(m, nn.Conv2d):
-            #     # m.weight.data.zero_()
-            #     m.weight.data.uniform_(-0.1, 0.1)
-            #     if m.bias is not None:
-            #         m.bias.data.zero_()
-            # 随机初始化(方案2)
-            # if isinstance(m, nn.Conv2d):
-            #     n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-            #     m.weight.data.normal_(0, math.sqrt(2. / n))
-
 
     def forward(self, x):
         h = x
