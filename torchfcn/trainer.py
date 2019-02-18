@@ -52,7 +52,7 @@ def mseloss_2d(input, target, size_average=True):
     return loss
 
 def smape(A, F):
-        return 100 / len(A) * np.sum(2 * np.abs(F - A) / (np.abs(A) + np.abs(F)))
+        return 100 / len(A) * np.sum( np.abs(F - A) / (np.abs(A) + np.abs(F)))
 
 def smape_loss(input, target):
     n, c, h, w = input.size()
@@ -66,14 +66,14 @@ def smape_loss(input, target):
         target_array = target[mask].numpy()
         if mask.data.sum() <= 0:
             smape_value = np.nan
-            print('input_array mask = %s' % input_array)
+            print('predict_array mask = %s' % input_array)
             print('target_array mask = %s' % target_array)
             return smape_value
         smape_value = smape(input_array, target_array)
     except Exception as e:
         print(e)
         raise ValueError
-    print('input_array mask = %s'%input_array)
+    print('predict_array mask = %s'%input_array)
     print('target_array mask = %s' % target_array)
     return smape_value
 
