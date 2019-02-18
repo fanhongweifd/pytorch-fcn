@@ -43,5 +43,6 @@ Building your own model in [model example](torchfcn/models/fcn8s_pm25.py)
 - mce_loss: Mean squared loss
 - predict_array mask: predict score
 - target_array mask: ground truth label
+- avg_grad: average gradient in backward
 
 <img src=".readme/smape.svg" width="30%" />  

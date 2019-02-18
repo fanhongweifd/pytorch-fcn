@@ -54,15 +54,15 @@ def smape_loss(input, target):
         target_array = target[mask].numpy()
         if mask.data.sum() <= 0:
             smape_value = np.nan
-            print('predict_array mask = %s' % input_array)
-            print('target_array mask = %s' % target_array)
+            # print('predict_array mask = %s' % input_array)
+            # print('target_array mask = %s' % target_array)
             return smape_value
         smape_value = smape(input_array, target_array)
     except Exception as e:
         print(e)
         raise ValueError
-    print('predict_array mask = %s' % input_array)
-    print('target_array mask = %s' % target_array)
+    # print('predict_array mask = %s' % input_array)
+    # print('target_array mask = %s' % target_array)
     return smape_value
 
 
@@ -138,10 +138,6 @@ class Trainer(object):
             val_smape_loss += smape_loss_data
             val_loss += loss_data
 
-        out = osp.join(self.out, 'visualization_viz')
-        if not osp.exists(out):
-            os.makedirs(out)
-
         val_loss /= len(self.val_loader)
         print('smape loss = %s' % val_smape_loss)
         val_smape_loss /= len(self.val_loader)
@@ -208,7 +204,7 @@ class Trainer(object):
             loss.backward()
             if self.use_grad_clip:
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip)
-            avg_gred = sum_gredient(self.model)
+            avg_grad = sum_gredient(self.model)
             self.optim.step()
             
 
@@ -220,8 +216,8 @@ class Trainer(object):
                     [smape_loss_data] + [''] * 2 + [elapsed_time]
                 log = map(str, log)
                 f.write(','.join(log) + '\n')
-                print('train epoch = %s, iteration=%s, lr=%s, avg_gred=%s, mce_loss=%s, smape=%s'%(
-                self.epoch, self.iteration, self.optim.param_groups[0]['lr'], avg_gred, loss_data, smape_loss_data))
+                print('train epoch = %s, iteration=%s, lr=%s, avg_grad=%s, mce_loss=%s, smape=%s'%(
+                self.epoch, self.iteration, self.optim.param_groups[0]['lr'], avg_grad.data.item(), loss_data, smape_loss_data))
             if self.iteration >= self.max_iter:
                 break
 
