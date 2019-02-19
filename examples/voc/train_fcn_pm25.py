@@ -7,7 +7,6 @@ import torch.optim.lr_scheduler as lr_scheduler
 import torch
 import yaml
 import torchfcn
-from train_fcn32s import git_hash
 
 
 here = osp.dirname(osp.abspath(__file__))
@@ -39,9 +38,6 @@ def main():
     parser.add_argument('--feature_dim', default=87, help='label_file_excel')
     
     args = parser.parse_args()
-
-    args.model = 'FCN8s'
-    args.git_hash = git_hash()
 
     now = datetime.datetime.now()
     args.out = osp.join(here, 'logs', now.strftime('%Y%m%d_%H%M%S.%f'))

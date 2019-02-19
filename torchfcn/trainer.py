@@ -131,7 +131,7 @@ class Trainer(object):
             if np.isnan(loss_data):
                 raise ValueError('loss is nan while validating')
             smape_loss_data = smape_loss(score, target)
-            print('this batch smape_loss =%s, all val smape_loss=%s'%(smape_loss_data,val_smape_loss))
+            # print('this batch smape_loss =%s, all val smape_loss=%s'%(smape_loss_data,val_smape_loss))
             # 这里没有把loss为nan的情况在总数中减去，后面要加入
             if np.isnan(smape_loss_data):
                 continue
