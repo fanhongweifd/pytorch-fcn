@@ -5,3 +5,5 @@ scipy
 torch>=0.2.0
 torchvision>=0.1.8
 tqdm
+torchstat
+torchsummary

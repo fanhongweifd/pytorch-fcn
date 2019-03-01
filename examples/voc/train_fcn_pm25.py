@@ -6,6 +6,9 @@ import os.path as osp
 import torch.optim.lr_scheduler as lr_scheduler
 import torch
 import yaml
+import sys
+# parentdir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0,'../../')
 import torchfcn
 
 
@@ -36,6 +39,7 @@ def main():
     parser.add_argument('--valid_label_file', type=str, help='label_file_excel')
     parser.add_argument('--file_type', type=str, default='xlsx' ,help='xlsx or pickle')
     parser.add_argument('--feature_dim', default=87, help='label_file_excel')
+    parser.add_argument('--batch_size', default=1, type=int, help='batch_size')
     
     args = parser.parse_args()
 
@@ -58,15 +62,17 @@ def main():
     kwargs = {'num_workers': 4, 'pin_memory': True} if cuda else {}
     train_loader = torch.utils.data.DataLoader(
         torchfcn.datasets.TransportData(args.train_data_file, args.train_label_file,file_type=args.file_type, feature_dim=args.feature_dim),
-        batch_size=1, shuffle=True, **kwargs)
+        batch_size=args.batch_size, shuffle=True, **kwargs)
     val_loader = torch.utils.data.DataLoader(
         torchfcn.datasets.TransportData(args.valid_data_file, args.valid_label_file,file_type=args.file_type, feature_dim=args.feature_dim),
-        batch_size=1, shuffle=False, **kwargs)
+        batch_size=args.batch_size, shuffle=False, **kwargs)
 
     # 2. model
 
-    model = torchfcn.models.FCN8sPM25_1conv()
-    
+    #model = torchfcn.models.FCN8sPM25_1conv() 
+    #model = torchfcn.models.FCN8sPM25_inception1() 
+    model = torchfcn.models.FCN8sPM25_1conv_size_1_1()
+ 
     start_epoch = 0
     start_iteration = 0
     if args.resume:

@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import xlrd
 from torch.utils import data
+from torch import nn
 from collections import defaultdict
 import pickle
 
@@ -146,13 +147,23 @@ def read_transport_xlsx(data_file, label_file, feature_dim=87):
 
 class TransportData(data.Dataset):
 
-    def __init__(self, data_file, label_file, file_type = 'xlsx',feature_dim=87):
+    def __init__(self, data_file, label_file, file_type = 'xlsx',feature_dim=87, standardization=True):
         if file_type == 'xlsx':
             self.data, self.label = read_transport_xlsx(data_file, label_file, feature_dim=feature_dim)
         elif file_type == 'pickle':
             with open(data_file, 'rb') as f:
                 load_data = pickle.load(f)
-                self.data = load_data['data']
+                if standardization:
+                    normal = nn.BatchNorm2d(feature_dim, affine=False, momentum=1)
+                    data = load_data['data']
+                    num = len(data)
+                    data_tensor = torch.zeros([len(data)]+list(data[0].size()))
+                    for i, one_data in enumerate(data):
+                        data_tensor[i, :] = data[i]
+                    data_standard = normal(data_tensor)
+                    self.data = [data_standard[i,:] for i in range(num)]
+                else:
+                    self.data = load_data['data']
             with open(label_file, 'rb') as f:
                 load_data = pickle.load(f)
                 self.label = load_data['label']

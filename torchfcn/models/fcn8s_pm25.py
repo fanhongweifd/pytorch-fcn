@@ -160,11 +160,62 @@ class FCN8sPM25_1conv(nn.Module):
         h = x
         h = self.relu1_1(self.conv1_1(h))
         return h
+    
+    
+class FCN8sPM25_1conv_size_1_1(nn.Module):
+
+    def __init__(self, feature_dim=87):
+        super(FCN8sPM25_1conv_size_1_1, self).__init__()
+        # conv1
+        self.conv1_1 = nn.Conv2d(feature_dim, 256, 1)
+        self.relu1_1 = nn.ReLU(inplace=True)
+        self.conv1_2 = nn.Conv2d(256, 1, 1)
+        self.relu1_2 = nn.ReLU(inplace=True)
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            pass
+
+    def forward(self, x):
+        h = x
+        h = self.relu1_1(self.conv1_1(h))
+        h = self.relu1_2(self.conv1_2(h))
+        return h
+    
+    
+class FCN8sPM25_inception1(nn.Module):
+
+    def __init__(self, feature_dim=87):
+        super(FCN8sPM25_inception1, self).__init__()
+        # conv1
+        self.conv1_1 = nn.Conv2d(feature_dim, 16, 1)
+        self.conv1_2 = nn.Conv2d(feature_dim, 16, 3, padding=1)
+        self.conv1_3 = nn.Conv2d(feature_dim, 16, 5, padding=2)
+
+        self.relu1_1 = nn.Sigmoid()
+        # self.relu1_1 = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(48, 1, 1)
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            pass
+
+    def forward(self, x):
+        x0 = self.conv1_1(x)
+        x1 = self.conv1_2(x)
+        x2 = self.conv1_3(x)
+        out = torch.cat((x0, x1, x2), 1)
+        x3 = self.relu1_1(out)
+        x4 = self.conv2(x3)
+        
+        return x4
 
 
 
 if __name__ == "__main__":
-    model = FCN8sPM25_1conv()
+    model = FCN8sPM25_inception1()
     model.eval()
     image = torch.randn(1, 87, 55, 55)
 
