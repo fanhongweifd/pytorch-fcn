@@ -8,7 +8,7 @@ import torch
 import yaml
 import sys
 # parentdir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0,'../../')
+sys.path.insert(0, '../../')
 import torchfcn
 
 
@@ -40,7 +40,7 @@ def main():
     parser.add_argument('--file_type', type=str, default='xlsx' ,help='xlsx or pickle')
     parser.add_argument('--feature_dim', default=87, help='label_file_excel')
     parser.add_argument('--batch_size', default=1, type=int, help='batch_size')
-    
+    parser.add_argument('--standardization', default=True, type=bool, help='standardization')
     args = parser.parse_args()
 
     now = datetime.datetime.now()
@@ -60,12 +60,10 @@ def main():
     # 1. dataset
 
     kwargs = {'num_workers': 4, 'pin_memory': True} if cuda else {}
-    train_loader = torch.utils.data.DataLoader(
-        torchfcn.datasets.TransportData(args.train_data_file, args.train_label_file,file_type=args.file_type, feature_dim=args.feature_dim),
-        batch_size=args.batch_size, shuffle=True, **kwargs)
-    val_loader = torch.utils.data.DataLoader(
-        torchfcn.datasets.TransportData(args.valid_data_file, args.valid_label_file,file_type=args.file_type, feature_dim=args.feature_dim),
-        batch_size=args.batch_size, shuffle=False, **kwargs)
+    train_transport_data = torchfcn.datasets.TransportData(args.train_data_file, args.train_label_file,file_type=args.file_type, feature_dim=args.feature_dim)
+    train_loader = torch.utils.data.DataLoader(train_transport_data,batch_size=args.batch_size, shuffle=True, **kwargs)
+    val_transport_data = torchfcn.datasets.TransportData(args.valid_data_file, args.valid_label_file,file_type=args.file_type, feature_dim=args.feature_dim)
+    val_loader = torch.utils.data.DataLoader(val_transport_data,batch_size=args.batch_size, shuffle=False, **kwargs)
 
     # 2. model
 
@@ -102,19 +100,39 @@ def main():
     print('load train data  = %s' % len(train_loader))
     print('load val data  = %s' % len(val_loader))
     
-    trainer = torchfcn.Trainer(
-        cuda=cuda,
-        model=model,
-        optimizer=optim,
-        scheduler=scheduler,
-        train_loader=train_loader,
-        val_loader=val_loader,
-        out=args.out,
-        max_iter=args.max_iteration,
-        interval_validate=10,
-        use_grad_clip=True,
-        clip=50
-    )
+    if args.standardization:
+        mean_and_var = {}
+        mean_and_var['mean'] = train_transport_data.data_mean
+        mean_and_var['var'] = train_transport_data.data_var
+        trainer = torchfcn.Trainer(
+            cuda=cuda,
+            model=model,
+            optimizer=optim,
+            scheduler=scheduler,
+            train_loader=train_loader,
+            val_loader=val_loader,
+            out=args.out,
+            max_iter=args.max_iteration,
+            interval_validate=10,
+            use_grad_clip=True,
+            mean_and_var=mean_and_var,
+            clip=50
+        )
+    else:
+        trainer = torchfcn.Trainer(
+            cuda=cuda,
+            model=model,
+            optimizer=optim,
+            scheduler=scheduler,
+            train_loader=train_loader,
+            val_loader=val_loader,
+            out=args.out,
+            max_iter=args.max_iteration,
+            interval_validate=10,
+            use_grad_clip=True,
+            mean_and_var=False,
+            clip=50
+        )
     trainer.epoch = start_epoch
     trainer.iteration = start_iteration
     trainer.train()

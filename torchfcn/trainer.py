@@ -36,7 +36,7 @@ def mseloss_2d(input, target, size_average=True):
     loss = torch.sum(loss.float())
     if size_average:
         if mask.data.sum() > 0:
-            loss /= mask.data.sum()
+            loss /= mask.data.sum().float()
     return loss
 
 def smape(A, F):
@@ -50,8 +50,8 @@ def smape_loss(input, target):
         input_reshape = input.transpose(1, 2).transpose(2, 3).contiguous()
         target = target.view(n, h, w, 1).repeat(1, 1, 1, c)
         mask = target > 0
-        input_array = input_reshape[mask].detach().numpy()
-        target_array = target[mask].numpy()
+        input_array = input_reshape[mask].cpu().detach().numpy()
+        target_array = target[mask].cpu().numpy()
         if mask.data.sum() <= 0:
             smape_value = np.nan
             # print('predict_array mask = %s' % input_array)
@@ -70,7 +70,7 @@ class Trainer(object):
 
     def __init__(self, cuda, model, optimizer, scheduler,
                  train_loader, val_loader, out, max_iter,
-                 size_average=True, interval_validate=None, use_scheduler=True, use_grad_clip=True, clip=1):
+                 size_average=True, interval_validate=None, use_scheduler=True, use_grad_clip=True, mean_and_var=False, clip=1):
         self.cuda = cuda
 
         self.model = model
@@ -84,6 +84,7 @@ class Trainer(object):
             datetime.datetime.now()
         self.size_average = size_average
         self.use_scheduler = use_scheduler
+        self.mean_and_var = mean_and_var
         self.use_grad_clip = use_grad_clip
         self.clip = clip
         if interval_validate is None:
@@ -155,14 +156,28 @@ class Trainer(object):
         is_best = val_smape_loss < self.best_smape
         if is_best:
             self.best_smape = val_smape_loss
-        torch.save({
-            'epoch': self.epoch,
-            'iteration': self.iteration,
-            'arch': self.model.__class__.__name__,
-            'optim_state_dict': self.optim.state_dict(),
-            'model_state_dict': self.model.state_dict(),
-            'best_smape': self.best_smape,
-        }, osp.join(self.out, 'checkpoint.pth.tar'))
+        if self.mean_and_var:
+            torch.save({
+                'epoch': self.epoch,
+                'iteration': self.iteration,
+                'arch': self.model.__class__.__name__,
+                'optim_state_dict': self.optim.state_dict(),
+                'model_state_dict': self.model.state_dict(),
+                'model': self.model,
+                'best_smape': self.best_smape,
+                'mean_and_var': self.mean_and_var,
+            }, osp.join(self.out, 'checkpoint.pth.tar'))
+        else:
+            torch.save({
+                'epoch': self.epoch,
+                'iteration': self.iteration,
+                'arch': self.model.__class__.__name__,
+                'optim_state_dict': self.optim.state_dict(),
+                'model_state_dict': self.model.state_dict(),
+                'model': self.model,
+                'best_smape': self.best_smape,
+            }, osp.join(self.out, 'checkpoint.pth.tar'))
+        
         if is_best:
             shutil.copy(osp.join(self.out, 'checkpoint.pth.tar'),
                         osp.join(self.out, 'model_best.pth.tar'))

@@ -32,6 +32,9 @@ See [train example](examples/voc/train.sh).
 Input file type should be xlsx or pickle (pickle perfer).
 Use script [transfer](torchfcn/datasets/transport.py) to transfer xlsx to pickle
 
+## Testing
+See [test example](tests/models_tests/test.sh)
+Input file type should be xlsx(excel file) like [test_file](tests/models_tests/test.xlsx)
 
 ## Model
 Building your own model in [model example](torchfcn/models/fcn8s_pm25.py)
