@@ -54,7 +54,7 @@ def main():
                         date = '/'.join([str(x) for x in date_time[i][0][0:3]])
                         time = str(int(date_time[i][1]))
                         output_feature = ','.join([str(x) for x in inner_layer_output[:, row, col].tolist()])
-                        output_list = [date, time, str(row), str(col), output_feature]
+                        output_list = [date, time, str(row+1), str(col+1), output_feature]
                         output_str = ','.join(output_list)
                         output_file.write(output_str + '\n')
     output_file.close()
